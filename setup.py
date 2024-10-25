@@ -9,7 +9,7 @@ setup(
     # Project uses reStructuredText, so ensure that the docutils get
     # installed or upgraded on the target machine
     install_requires=["docutils>=0.3",
-                      "numpy>=1.18",
+                      "numpy>=1.18, <=1.26.4",
                       "numba>=0.48",
                       "scipy>=1.4.1, <=1.12.0",
                       "sympy>=1.6, <=1.12.1"],
