@@ -1073,7 +1073,8 @@ class gaussianBeam(laserBeam):
         self.con_pol = self.pol(np.array([0., 0., 0.]), 0.)
 
         # Save the parameters specific to the Gaussian beam:
-        self.s_max = s # central saturation parameter
+        self.s_max, _ = promote_to_lambda(s) # central saturation parameter
+        #self.s_max = s # central saturation parameter
         self.wb = wb # 1/e^2 radius
         self.define_rotation_matrix()
 
@@ -1084,14 +1085,78 @@ class gaussianBeam(laserBeam):
 
         # Use scipy to define the rotation matrix
         self.rmat = Rotation.from_euler('ZY', [phi, th]).inv().as_matrix()
+        self.rmat_inv = Rotation.from_euler('ZY',[phi, th]).as_matrix()
 
     def intensity(self, R=np.array([0., 0., 0.]), t=0.):
         # Rotate up to the z-axis where we can apply formulas:
         Rp = np.einsum('ij,j...->i...', self.rmat, R)
         rho_sq=np.sum(Rp[:2]**2, axis=0)
         # Return the intensity:
-        return self.s_max*np.exp(-2*rho_sq/self.wb**2)
+        return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)
+        #return self.s_max*np.exp(-2*rho_sq/self.wb**2)
 
+class focusedGaussianBeam(gaussianBeam):
+    """
+    Gaussian beam which changes shape as it travels. 
+    Parameters
+    ----------
+    kvec : array_like with shape (3,) or callable
+        The k-vector of the laser beam, specified as either a three-element
+        list or numpy array.
+    pol : int, float, array_like with shape (3,), or callable
+        The polarization of the laser beam, specified as either an integer, float
+        array_like with shape(3,).  If an integer or float,
+        if `pol<0` the polarization will be left circular polarized relative to
+        the k-vector of the light.  If `pol>0`, the polarization will be right
+        circular polarized.  If array_like, polarization will be specified by the
+        vector, whose basis is specified by `pol_coord`.
+    s : float or callable
+        The maximum intensity of the laser beam at the center, specified as
+        either a float or as callable function.
+    delta : float or callable
+        Detuning of the laser beam.  If a callable, it must have a
+        signature like (t) where t is a float and it must return a float.
+    wb : float
+        The :math:`1/e^2` radius of the beam.
+    z0 : float
+        The distance from the origin where the beam waist is minimum.
+    lmbda : float
+        The laser wavelength in the chosen distance units
+    **kwargs:
+        Additional keyword arguments to pass to the laserBeam superclass.
+    """
+    def __init__(self, kvec, pol, s, delta, wb, z0, lmbda, **kwargs):
+        super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wb=wb, **kwargs)
+
+        self.z0 = z0 # Save the beam waist location.
+        self.lmbda = lmbda # Save wavelength.
+        self.zr = np.pi*(self.wb**2)/self.lmbda # Calculate the Rayleigh range.
+        self.kvec_size = np.linalg.norm(kvec)
+
+        self.kvec = self.kvec_func
+
+    def kvec_func(self, R=np.array([0., 0., 0.]), t=0.):
+        # Rotate up to the z-axis where we can apply formulas:
+        Rp = np.einsum('ij,j...->i...', self.rmat, R)
+        Rp[2] -= self.z0
+        rho_sq=Rp[0]**2 + Rp[1]**2
+        zr_fraction_helper = self.kvec_size*Rp[2]/(Rp[2]**2 + self.zr**2)
+        kvec_dir = np.array([\
+        zr_fraction_helper*Rp[0],\
+        zr_fraction_helper*Rp[1],\
+        self.kvec_size*(1 - rho_sq*(Rp[2]**2)/(((Rp[2]**2) + (self.zr**2))**2) + rho_sq/(2*(Rp[2]**2 + self.zr**2))) - self.zr/(Rp[2]**2 + self.zr**2)])
+        k = np.einsum('ij,j...->i...', self.rmat_inv, kvec_dir)
+        return k # self.kvec_size*k/np.linalg.norm(k)
+
+    def intensity(self, R=np.array([0., 0., 0.]), t=0.):
+        # Rotate up to the z-axis where we can apply formulas:
+        Rp = np.einsum('ij,j...->i...', self.rmat, R)
+        rho_sq=np.sum(Rp[:2]**2, axis=0)
+
+        waist = self.wb*np.sqrt(1 + ((Rp[2]-self.z0)/self.zr)**2)
+
+        # Return the intensity:
+        return self.s_max(R,t)*((self.wb/waist)**2)*np.exp(-2*rho_sq/waist**2 )
 
 class clippedGaussianBeam(gaussianBeam):
     """
@@ -1143,7 +1208,7 @@ class clippedGaussianBeam(gaussianBeam):
     def intensity(self, R=np.array([0., 0., 0.]), t=0.):
         Rp = np.einsum('ij,j...->i...', self.rmat, R)
         rho_sq = np.sum(Rp[:2]**2, axis=0)
-        return self.s_max*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)
+        return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)
 
 
 class laserBeams(object):
