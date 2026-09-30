@@ -606,8 +606,9 @@ if __name__ == '__main__':
     """
     A simple test of the Hamiltonian class.
     """
-    Hg, mugq = hamiltonians.singleF(F=1, muB=1)
-    He, mueq = hamiltonians.singleF(F=2, muB=1)
+    import pylcp.hamiltonians
+    Hg, mugq = pylcp.hamiltonians.singleF(F=1, muB=1)
+    He, mueq = pylcp.hamiltonians.singleF(F=2, muB=1)
     d_q = pylcp.hamiltonians.dqij_two_bare_hyperfine(1, 2)
 
     ham1 = hamiltonian()
