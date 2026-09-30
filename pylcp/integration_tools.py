@@ -597,10 +597,24 @@ def solve_ivp_random(fun, random_func, t_span, y0,  method='RK45', t_eval=None,
             status = -1
             break
 
-        (random_event_number, max_step) = random_func(solver.t, solver.y,
-                                                      solver.step_size)
+        # (random_event_number, max_step) = random_func(solver.t, solver.y,
+        #                                               solver.step_size)
+        (random_event_number, max_step, dv) = random_func(solver.t, solver.y,
+                                                          solver.step_size)
+        
         if not max_step is None:
             solver.max_step = np.min([max_step, max_step_global])
+
+        # If there was a kick, add this velocity kick, if the solver is BDF, restart the solver
+        if random_event_number>0:
+            y_new = solver.y.copy()
+            y_new[-6:-3] += dv
+
+            if isinstance(solver, BDF) or isinstance(solver, LSODA):
+                solver = method(fun,solver.t,y_new,tf,vectorized=vectorized,
+                                max_step=solver.max_step,**options)
+            else:
+                solver.y[:] = y_new
 
         t_old = solver.t_old
         t = solver.t

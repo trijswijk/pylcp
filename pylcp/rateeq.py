@@ -678,6 +678,8 @@ class rateeq(governingeq):
             num_of_scatters = 0
             total_P = 0.
 
+            dv = np.zeros(3)            # set recoil to zero
+
             # Go over each block in the Hamiltonian and compute the decay:
             for key in self.decay_rates:
                 P = dt*self.decay_rates[key]*y[self.decay_N_indices[key]]
@@ -689,8 +691,10 @@ class rateeq(governingeq):
                 # recoil velocity.
                 for ii in range(np.sum(dice<P)):
                     num_of_scatters += 1
-                    y[-6:-3] += self.recoil_velocity[key]*(random_vector(rng, free_axes)+
-                                                           random_vector(rng, free_axes))
+                    # y[-6:-3] += self.recoil_velocity[key]*(random_vector(rng, free_axes)+
+                    #                                        random_vector(rng, free_axes))
+                    dv += self.recoil_velocity[key]*(random_vector(rng, free_axes)+
+                                                     random_vector(rng, free_axes))
 
                 # Save the total probability of a scatter:
                 total_P += np.sum(P)
@@ -699,7 +703,8 @@ class rateeq(governingeq):
             # exceeding dt max:
             new_dt_max = (max_scatter_probability/total_P)*dt
 
-            return (num_of_scatters, new_dt_max)
+            # return (num_of_scatters, new_dt_max)
+            return (num_of_scatters, new_dt_max, dv)
 
         y0 = np.concatenate((self.N0, self.v0, self.r0))
         if random_force:
