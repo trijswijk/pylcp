@@ -1054,10 +1054,12 @@ class gaussianBeam(laserBeam):
         signature like (t) where t is a float and it must return a float.
     wb : float
         The :math:`1/e^2` radius of the beam.
+    pos : array_like with shape (3,)
+        Position of the laser beam.
     **kwargs:
         Additional keyword arguments to pass to the laserBeam superclass.
     """
-    def __init__(self, kvec, pol, s, delta, wb, **kwargs):
+    def __init__(self, kvec, pol, s, delta, wb, pos, **kwargs):
         if callable(kvec):
             raise TypeError('kvec cannot be a function for a Gaussian beam.')
 
@@ -1078,6 +1080,9 @@ class gaussianBeam(laserBeam):
         self.wb = wb # 1/e^2 radius
         self.define_rotation_matrix()
 
+        # Save position arguments
+        self.position = pos
+
     def define_rotation_matrix(self):
         # Angles of rotation:
         th = np.arccos(self.con_khat[2])
@@ -1088,8 +1093,10 @@ class gaussianBeam(laserBeam):
         self.rmat_inv = Rotation.from_euler('ZY',[phi, th]).as_matrix()
 
     def intensity(self, R=np.array([0., 0., 0.]), t=0.):
+        # Calculate displacement
+        Rprime = (R.T - self.position).T
         # Rotate up to the z-axis where we can apply formulas:
-        Rp = np.einsum('ij,j...->i...', self.rmat, R)
+        Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
         rho_sq=np.sum(Rp[:2]**2, axis=0)
         # Return the intensity:
         return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)
