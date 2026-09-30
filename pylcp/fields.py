@@ -1156,8 +1156,10 @@ class focusedGaussianBeam(gaussianBeam):
         return k # self.kvec_size*k/np.linalg.norm(k)
 
     def intensity(self, R=np.array([0., 0., 0.]), t=0.):
+        # Calculate displacement
+        Rprime = (R.T - self.position).T
         # Rotate up to the z-axis where we can apply formulas:
-        Rp = np.einsum('ij,j...->i...', self.rmat, R)
+        Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
         rho_sq=np.sum(Rp[:2]**2, axis=0)
 
         waist = self.wb*np.sqrt(1 + ((Rp[2]-self.z0)/self.zr)**2)
@@ -1213,8 +1215,13 @@ class clippedGaussianBeam(gaussianBeam):
         self.rs = rs # Save the radius of the stop.
 
     def intensity(self, R=np.array([0., 0., 0.]), t=0.):
-        Rp = np.einsum('ij,j...->i...', self.rmat, R)
+        # Calculate displacement
+        Rprime = (R.T - self.position).T
+        # Rotate up to the z-axis where we can apply formulas:
+        Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
         rho_sq = np.sum(Rp[:2]**2, axis=0)
+        
+        # Return the intensity:
         return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)
 
 
