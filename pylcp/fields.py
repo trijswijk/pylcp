@@ -17,7 +17,7 @@ def dot2D(a, b):
 def electric_field(r, t, amp, pol, k, phase):
     return pol*amp*np.exp(-1j*(k[0]*r[0]+k[1]*r[1]+k[2]*r[2]) + 1j*phase)
 
-
+# For when R is scalar (position)
 def return_constant_val(R, t, val):
     if R.shape==(3,):
         return val
@@ -27,6 +27,7 @@ def return_constant_val(R, t, val):
         raise ValueError('The first dimension of R should have length 3, ' +
                          'not %d.'%R.shape[0])
 
+# For when R is vector (direction)
 def return_constant_vector(R, t, vector):
     if R.shape==(3,):
         return vector
@@ -1059,7 +1060,7 @@ class gaussianBeam(laserBeam):
     **kwargs:
         Additional keyword arguments to pass to the laserBeam superclass.
     """
-    def __init__(self, kvec, pol, s, delta, wb, pos, **kwargs):
+    def __init__(self, kvec, pol, s, delta, wb, pos = np.array([0.,0.,0.]), **kwargs):
         if callable(kvec):
             raise TypeError('kvec cannot be a function for a Gaussian beam.')
 
@@ -1080,7 +1081,7 @@ class gaussianBeam(laserBeam):
         self.wb = wb # 1/e^2 radius
         self.define_rotation_matrix()
 
-        # Save position arguments
+        # Save position of gaussian beam center
         self.position = pos
 
     def define_rotation_matrix(self):
@@ -1129,11 +1130,13 @@ class focusedGaussianBeam(gaussianBeam):
         The distance from the origin where the beam waist is minimum.
     lmbda : float
         The laser wavelength in the chosen distance units
+    pos : array_like with shape (3,)
+        Position of the laser beam.
     **kwargs:
         Additional keyword arguments to pass to the laserBeam superclass.
     """
-    def __init__(self, kvec, pol, s, delta, wb, z0, lmbda, **kwargs):
-        super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wb=wb, **kwargs)
+    def __init__(self, kvec, pol, s, delta, wb, z0, lmbda, pos = np.array([0.,0.,0.]), **kwargs):
+        super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wb=wb, pos=pos, **kwargs)
 
         self.z0 = z0 # Save the beam waist location.
         self.lmbda = lmbda # Save wavelength.
@@ -1206,11 +1209,13 @@ class clippedGaussianBeam(gaussianBeam):
         The :math:`1/e^2` radius of the beam.
     rs : float
         The radius of the stop.
+    pos : array_like with shape (3,)
+        Position of the laser beam.
     **kwargs:
         Additional keyword arguments to pass to the laserBeam superclass.
     """
-    def __init__(self, kvec, pol, s, delta, wb, rs, **kwargs):
-        super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wb=wb, **kwargs)
+    def __init__(self, kvec, pol, s, delta, wb, rs, pos = np.array([0.,0.,0.]), **kwargs):
+        super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wb=wb, pos=pos, **kwargs)
 
         self.rs = rs # Save the radius of the stop.
 
@@ -1223,6 +1228,159 @@ class clippedGaussianBeam(gaussianBeam):
         
         # Return the intensity:
         return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)
+
+class ellipticalGaussianBeam(laserBeam):
+    """
+    Elliptical Gaussian beam
+
+    Parameters
+    ----------
+    kvec : array_like with shape (3,) or callable
+        The k-vector of the laser beam, specified as either a three-element
+        list or numpy array.
+    pol : int, float, array_like with shape (3,), or callable
+        The polarization of the laser beam, specified as either an integer, float
+        array_like with shape(3,).  If an integer or float,
+        if `pol<0` the polarization will be left circular polarized relative to
+        the k-vector of the light.  If `pol>0`, the polarization will be right
+        circular polarized.  If array_like, polarization will be specified by the
+        vector, whose basis is specified by `pol_coord`.
+    s : float or callable
+        The maximum intensity of the laser beam at the center, specified as
+        either a float or as callable function.
+    delta : float or callable
+        Detuning of the laser beam.  If a callable, it must have a
+        signature like (t) where t is a float and it must return a float.
+    wa : float
+        The :math:`1/e^2` x'-radius of the beam.
+    wb : float
+        The :math:`1/e^2` y'-radius of the beam.
+    pos : array_like with shape (3,)
+        Position of the laser beam.
+    **kwargs:
+        Additional keyword arguments to pass to the laserBeam superclass.
+    """
+    def __init__(self, kvec, pol, s, delta, wa, wb, pos = np.array([0., 0., 0.]), **kwargs):
+        if callable(kvec):
+            raise TypeError('kvec cannot be a function for a Gaussian beam.')
+
+        if callable(pol):
+            raise TypeError('Polarization cannot be a function for a Gaussian beam.')
+
+        # Use super class to define kvec(R, t), pol(R, t), and delta(t)
+        super().__init__(kvec=kvec, pol=pol, delta=delta, **kwargs)
+
+        # Save the constant values (might be useful):
+        self.con_kvec = kvec
+        self.con_khat = kvec/np.linalg.norm(kvec)
+        self.con_pol = self.pol(np.array([0., 0., 0.]), 0.)
+
+        # Save the parameters specific to the Gaussian beam:
+        self.s_max = s # central saturation parameter
+        self.wa = wa
+        self.wb = wb # 1/e^2 radius
+        self.define_rotation_matrix()
+
+        # Save position of gaussian beam center
+        self.position = pos
+
+    def define_rotation_matrix(self):
+        # Angles of rotation:
+        th = np.arccos(self.con_khat[2])
+        phi = np.arctan2(self.con_khat[1], self.con_khat[0])
+
+        # Use scipy to define the rotation matrix
+        self.rmat = Rotation.from_euler('ZY', [phi, th]).inv().as_matrix()
+        self.rmat_inv = Rotation.from_euler('ZY',[phi, th]).as_matrix()
+
+    def intensity(self, R=np.array([0., 0., 0.]), t=0.):
+        # Calculate displacement
+        Rprime = (R.T - self.position).T
+        # Rotate up to the z-axis where we can apply formulas:
+        Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
+        x_sq = np.sum(Rp[0]**2, axis=0)
+        y_sq = np.sum(Rp[1]**2, axis=0)
+        # Return the intensity:
+        return self.s_max(R,t)*np.exp(-2*(x_sq/self.wa**2 + y_sq/self.wb**2))
+
+class clippedellipticalGaussianBeam(ellipticalGaussianBeam):
+    """
+    Clipped, collimated Gaussian beam
+
+    Parameters
+    ----------
+    kvec : array_like with shape (3,) or callable
+        The k-vector of the laser beam, specified as either a three-element
+        list or numpy array.
+    pol : int, float, array_like with shape (3,), or callable
+        The polarization of the laser beam, specified as either an integer, float
+        array_like with shape(3,).  If an integer or float,
+        if `pol<0` the polarization will be left circular polarized relative to
+        the k-vector of the light.  If `pol>0`, the polarization will be right
+        circular polarized.  If array_like, polarization will be specified by the
+        vector, whose basis is specified by `pol_coord`.
+    s : float or callable
+        The maximum intensity of the laser beam at the center, specified as
+        either a float or as callable function.
+    delta : float or callable
+        Detuning of the laser beam.  If a callable, it must have a
+        signature like (t) where t is a float and it must return a float.
+    wa : float
+        The :math:`1/e^2` x'-radius of the beam.
+    wb : float
+        The :math:`1/e^2` y'-radius of the beam.
+    rsa : float or array_like with shape (2,)
+        The radius of the stop, in the x'-direction.
+    rsb : float or array_like with shape (2,)
+        The radius of the stop in the y'-direction.
+    clipmethod : string
+        Clipping method for the beam:
+            * 'radius' (default): rsa, rsb are float-type
+              An elliptical radius is selected with respect to beam center.
+            * 'lr' : rsa, rsb are array-type with shape (2,)
+              The beam is clipped on the left and right at a distance respective to the beam center.
+    pos : array_like with shape (3,)
+        Position of the laser beam.
+    **kwargs:
+        Additional keyword arguments to pass to the laserBeam superclass.
+    """
+    
+    def __init__(self, kvec, pol, s, delta, wa, wb, rsa, rsb, clipmethod = 'radius', pos = np.array([0.,0.,0.]), **kwargs):
+            super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wa=wa, wb=wb, pos=pos, **kwargs)
+            
+            # Save the radius and method of the stop.
+            self.rsa = rsa
+            self.rsb = rsb
+            self.clipmethod = clipmethod
+
+            if self.clipmethod == 'lr':
+                if np.asarray(self.rsa).shape != (2,) or np.asarray(self.rsb).shape != (2,):
+                    raise TypeError("rsa and rsb need to be of shape (2,) for 'lr' method")
+            elif self.clipmethod == 'radius':
+                if np.asarray(self.rsa).ndim != 0 or np.asarray(self.rsb).ndim != 0:
+                    raise TypeError("radius needs to be a scalar value for 'radius' method")
+                if self.rsa <= 0 or self.rsb <= 0:
+                    raise ValueError("radius needs to be greater than zero")
+            else:
+                raise TypeError("No valid clipping method is selected")
+    
+    def intensity(self, R=np.array([0., 0., 0.]), t=0.):
+        # Calculate displacement
+        Rprime = (R.T - self.position).T
+        # Rotate up to the z-axis where we can apply formulas:
+        Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
+        x_sq = np.sum(Rp[0]**2, axis=0)
+        y_sq = np.sum(Rp[1]**2, axis=0)
+
+        if self.method == "lr":
+            amin, amax = self.rsa
+            bmin, bmax = self.rsb
+            clip = (amin <= Rp[0] <= amax) & (bmin <= Rp[1] <= bmax)
+        elif self.method == "radius":
+            clip = (np.sqrt(x_sq)<self.rsa) & (np.sqrt(y_sq)<self.rsb)
+        
+        # Return the intensity:
+        return self.s_max(R,t)*np.exp(-2*(x_sq/self.wa**2 + y_sq/self.wb**2))*clip
 
 
 class laserBeams(object):
@@ -1597,6 +1755,43 @@ class laserBeams(object):
         """
         return [beam.polarization_ellipse(xp, yp, R, t) for beam in self.beam_vector]
 
+
+class conventional2DMOTBeams(laserBeams):
+    """
+        A collection of laser beams for 4-beam MOT
+    
+        The standard geometry is to generate counter-progagating beams along the 
+        x-y plane :math:`(\\hat{x}, \\hat{y})`.
+    
+        Parameters
+        ----------
+        k : float, optional
+            Magnitude of the k-vector for the four laser beams.  Default: 1
+        pol : int or float, optional
+            Sign of the circular polarization for the beams moving along
+            :math:`\\hat{z}`.  Default: +1.  Orthogonal beams have opposite
+            polarization by default.
+        rotation_angles : array_like
+            List of angles to define a rotated MOT.  Default: [0., 0., 0.]
+        rotation_spec : str
+            String to define the convention of the Euler rotations.  Default: 'ZYZ'
+        beam_type : pylcp.laserBeam or subclass
+            Type of beam to generate.
+        **kwargs :
+            other keyword arguments to pass to beam_type
+        """
+    def __init__(self, k=1, pol=+1, rotation_angles=[0., 0., 0.],
+                 rotation_spec='ZYZ', beam_type=laserBeam, **kwargs):
+        super().__init__()
+
+        rot_mat = Rotation.from_euler(rotation_spec, rotation_angles).as_matrix()
+
+        kvecs = [np.array([ 1.,  0.,  0.]), np.array([-1.,  0.,  0.]),
+                 np.array([ 0.,  1.,  0.]), np.array([ 0., -1.,  0.])]
+        pols = [-pol, -pol, -pol, -pol]
+
+        for kvec, pol in zip(kvecs, pols):
+            self.add_laser(beam_type(kvec=rot_mat @ (k*kvec), pol=pol, **kwargs))
 
 class conventional3DMOTBeams(laserBeams):
     """
