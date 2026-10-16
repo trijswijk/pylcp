@@ -1247,18 +1247,17 @@ class clippedGaussianBeam(gaussianBeam):
         # Rotate up to the z-axis where we can apply formulas:
         Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
         rho_sq = np.sum(Rp[:2]**2, axis=0)
-        x_sq = np.sum(Rp[0]**2, axis=0)
-        y_sq = np.sum(Rp[1]**2, axis=0)
 
-        if self.method == "lr":
+        if self.clipmethod == "lr":
             amin, amax = self.rsa
             bmin, bmax = self.rsb
-            clip = (amin <= Rp[0] <= amax) & (bmin <= Rp[1] <= bmax)
-        elif self.method == "radius":
-            clip = (np.sqrt(x_sq)<self.rsa) & (np.sqrt(y_sq)<self.rsb)
+            clip = ((amin <= Rp[0]) & (Rp[0] <= amax)
+                    & (bmin <= Rp[1]) & (Rp[1] <= bmax))
+        elif self.clipmethod == "radius":
+            clip = ((Rp[0] / self.rsa)**2 + (Rp[1] / self.rsb)**2 < 1)
         
         # Return the intensity:
-        return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)*clip
+        return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*clip
 
 class ellipticalGaussianBeam(laserBeam):
     """
@@ -1307,9 +1306,9 @@ class ellipticalGaussianBeam(laserBeam):
         self.con_pol = self.pol(np.array([0., 0., 0.]), 0.)
 
         # Save the parameters specific to the Gaussian beam:
-        self.s_max = s # central saturation parameter
-        self.wa = wa
-        self.wb = wb # 1/e^2 radius
+        self.s_max, _ = promote_to_lambda(s)    # central saturation parameter
+        self.wa = wa                            # 1/e^2 x'-radius
+        self.wb = wb                            # 1/e^2 y'-radius
         self.define_rotation_matrix()
 
         # Save position of gaussian beam center
@@ -1329,8 +1328,8 @@ class ellipticalGaussianBeam(laserBeam):
         Rprime = (R.T - self.position).T
         # Rotate up to the z-axis where we can apply formulas:
         Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
-        x_sq = np.sum(Rp[0]**2, axis=0)
-        y_sq = np.sum(Rp[1]**2, axis=0)
+        x_sq = Rp[0]**2
+        y_sq = Rp[1]**2
         # Return the intensity:
         return self.s_max(R,t)*np.exp(-2*(x_sq/self.wa**2 + y_sq/self.wb**2))
 
@@ -1400,15 +1399,16 @@ class clippedellipticalGaussianBeam(ellipticalGaussianBeam):
         Rprime = (R.T - self.position).T
         # Rotate up to the z-axis where we can apply formulas:
         Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
-        x_sq = np.sum(Rp[0]**2, axis=0)
-        y_sq = np.sum(Rp[1]**2, axis=0)
-
-        if self.method == "lr":
+        x_sq = Rp[0]**2
+        y_sq = Rp[1]**2
+        
+        if self.clipmethod == "lr":
             amin, amax = self.rsa
             bmin, bmax = self.rsb
-            clip = (amin <= Rp[0] <= amax) & (bmin <= Rp[1] <= bmax)
-        elif self.method == "radius":
-            clip = (np.sqrt(x_sq)<self.rsa) & (np.sqrt(y_sq)<self.rsb)
+            clip = ((amin <= Rp[0]) & (Rp[0] <= amax)
+                    & (bmin <= Rp[1]) & (Rp[1] <= bmax))
+        elif self.clipmethod == "radius":
+            clip = ((Rp[0] / self.rsa)**2 + (Rp[1] / self.rsb)**2 < 1)
         
         # Return the intensity:
         return self.s_max(R,t)*np.exp(-2*(x_sq/self.wa**2 + y_sq/self.wb**2))*clip
