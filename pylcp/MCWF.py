@@ -28,7 +28,7 @@ def cartesian_vector_tensor_dot(a, B):
         # Constant B, variable a:
         return np.sum(a[np.newaxis, ...]*B[..., np.newaxis], axis=1)
     else:
-        # Varaible a and variable B.  Will throw an error if a.shape[1:] != B.shape[2:]:
+        # Variable a and variable B. Will throw an error if a.shape[1:] != B.shape[2:]:
         return np.sum(a[np.newaxis, ...]*B[...], axis=1)
 
 class force_profile(base_force_profile):

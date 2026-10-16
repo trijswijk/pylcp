@@ -1207,17 +1207,39 @@ class clippedGaussianBeam(gaussianBeam):
         signature like (t) where t is a float and it must return a float.
     wb : float
         The :math:`1/e^2` radius of the beam.
-    rs : float
-        The radius of the stop.
+    rsa : float or array_like with shape (2,)
+        The radius of the stop, in the x'-direction.
+    rsb : float or array_like with shape (2,)
+        The radius of the stop in the y'-direction.
+    clipmethod : string
+        Clipping method for the beam:
+        * 'radius' (default): rsa, rsb are float-type
+            An elliptical radius is selected with respect to beam center.
+        * 'lr' : rsa, rsb are array-type with shape (2,)
+            The beam is clipped on the left and right at a distance respective to the beam center.
     pos : array_like with shape (3,)
         Position of the laser beam.
     **kwargs:
         Additional keyword arguments to pass to the laserBeam superclass.
     """
-    def __init__(self, kvec, pol, s, delta, wb, rs, pos = np.array([0.,0.,0.]), **kwargs):
+    def __init__(self, kvec, pol, s, delta, wb, rsa, rsb, clipmethod = 'radius', pos = np.array([0.,0.,0.]), **kwargs):
         super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wb=wb, pos=pos, **kwargs)
 
-        self.rs = rs # Save the radius of the stop.
+        # Save the radius and method for the clipping.
+        self.rsa = rsa
+        self.rsb = rsb
+        self.clipmethod = clipmethod
+
+        if self.clipmethod == 'lr':
+            if np.asarray(self.rsa).shape != (2,) or np.asarray(self.rsb).shape != (2,):
+                raise TypeError("rsa and rsb need to be of shape (2,) for 'lr' method")
+        elif self.clipmethod == 'radius':
+            if np.asarray(self.rsa).ndim != 0 or np.asarray(self.rsb).ndim != 0:
+                raise TypeError("radius needs to be a scalar value for 'radius' method")
+            if self.rsa <= 0 or self.rsb <= 0:
+                raise ValueError("radius needs to be greater than zero")
+        else:
+            raise TypeError("No valid clipping method is selected")
 
     def intensity(self, R=np.array([0., 0., 0.]), t=0.):
         # Calculate displacement
@@ -1225,9 +1247,18 @@ class clippedGaussianBeam(gaussianBeam):
         # Rotate up to the z-axis where we can apply formulas:
         Rp = np.einsum('ij,j...->i...', self.rmat, Rprime)
         rho_sq = np.sum(Rp[:2]**2, axis=0)
+        x_sq = np.sum(Rp[0]**2, axis=0)
+        y_sq = np.sum(Rp[1]**2, axis=0)
+
+        if self.method == "lr":
+            amin, amax = self.rsa
+            bmin, bmax = self.rsb
+            clip = (amin <= Rp[0] <= amax) & (bmin <= Rp[1] <= bmax)
+        elif self.method == "radius":
+            clip = (np.sqrt(x_sq)<self.rsa) & (np.sqrt(y_sq)<self.rsb)
         
         # Return the intensity:
-        return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)
+        return self.s_max(R,t)*np.exp(-2*rho_sq/self.wb**2)*(np.sqrt(rho_sq)<self.rs)*clip
 
 class ellipticalGaussianBeam(laserBeam):
     """
@@ -1348,7 +1379,7 @@ class clippedellipticalGaussianBeam(ellipticalGaussianBeam):
     def __init__(self, kvec, pol, s, delta, wa, wb, rsa, rsb, clipmethod = 'radius', pos = np.array([0.,0.,0.]), **kwargs):
             super().__init__(kvec=kvec, pol=pol, s=s, delta=delta, wa=wa, wb=wb, pos=pos, **kwargs)
             
-            # Save the radius and method of the stop.
+            # Save the radius and method for the clipping.
             self.rsa = rsa
             self.rsb = rsb
             self.clipmethod = clipmethod
