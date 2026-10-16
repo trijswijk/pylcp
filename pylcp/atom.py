@@ -188,29 +188,38 @@ class atom():
                                     lam=670.961560887e-9, tau=27.102e-9,
                                     gJ=-1.335, Ahfs=-1.155e6, Bhfs=-0.40e6))
 
+        # >>> ---------------------------------------------------------------
+
         elif species == "7Li" or species == "Li7":
             self.I = 3/2  # nuclear spin
             self.gI = -0.0011822130  # nuclear magnetic moment
-            self.mass = 7.0160045*cts.value('atomic mass constant')  # kg
+            self.mass = 7.01600455*cts.value('atomic mass constant')  # kg
 
             # Ground state:
             self.state.append(state(n=2, L=0, J=1/2, lam=np.inf, tau=np.inf,
                                     gJ=2.0023010, Ahfs=401.7520433e6, S=1/2))
             # D1 line (2P_{1/2})
-            self.state.append(state(n=2, L=1, J=1/2, lam=670.976658173e-9,
+            self.state.append(state(n=2, L=1, J=1/2, lam=670.976654939e-9,          # lam_old = 670.976658173e-9,
                                     tau=27.109e-9, gJ=0.6668, Ahfs=45.914e6,
                                     S=1/2))
             # D2 line (2P_{3/2})
-            self.state.append(state(n=2, L=1, J=3/2, lam=670.961560887e-9,
+            self.state.append(state(n=2, L=1, J=3/2, lam=670.961559812e-9,          # lam_old = 670.961560887e-9,
                                     tau=27.102e-9, gJ=1.335, Ahfs=-3.055e6,
                                     Bhfs=-0.221e6, S=1/2))
             # 3P_{1/2}
             self.state.append(state(n=3, L=1, J=1/2, lam=323.3590e-9,
                                     tau=998.4e-9, gJ=2/3, Ahfs=13.5e6, S=1/2))
-            # 3P_{1/2}
+            # 3P_{3/2}
             self.state.append(state(n=3, L=1, J=3/2, lam=323.3590e-9,
                                     tau=998.4e-9, gJ=4/3, Ahfs=-0.965e6,
                                     Bhfs=-0.019e6, S=1/2))
+
+            # Mass value: https://doi.org/10.1103/PhysRevLett.96.163004
+            # Hyperfine: https://doi.org/10.1103/RevModPhys.49.31
+            # Wavelengths: https://doi.org/10.1103/PHYSREVA.75.052508 
+            # Overview: https://www.fdr.uni-hamburg.de/record/13790 
+
+        # <<< ---------------------------------------------------------------
 
         elif species == "23Na" or species == "Na23":
             self.I = 3/2  # nuclear spin
